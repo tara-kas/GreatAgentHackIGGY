@@ -7,6 +7,7 @@ import requests
 import json
 import sys
 from pathlib import Path
+from datetime import datetime
 
 BASE_URL = "https://6ofr2p56t1.execute-api.us-east-1.amazonaws.com/prod/api"
 HEADERS = {"Content-Type": "application/json"}
@@ -229,10 +230,12 @@ def main():
             f"{status} {reveal} #{result['prompt_id']:2d}: {result['prompt_name']:30s} | Status: {result['status_code']}"
         )
 
-    # Save results to file
-    output_file = f"{agent_name}_reveal_results.json"
+    # Save results to file with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"{agent_name}_reveal_results_{timestamp}.json"
     output_data = {
         "agent": agent_name,
+        "timestamp": datetime.now().isoformat(),
         "total_prompts": len(results),
         "successful": len(successful),
         "reveals": len(reveals),
