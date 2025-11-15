@@ -4,7 +4,7 @@ import time
 from requests.exceptions import RequestException, Timeout, ConnectionError
 import os
 
-from TrackC.util import make_api_call, judge_attack
+from TrackC.Jailbreak.util import make_api_call, judge_attack
 
 
 
