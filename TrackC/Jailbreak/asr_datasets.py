@@ -42,7 +42,7 @@ def process_single_request(agent: str, question: str, prompt_idx: int) -> Tuple[
 
 
 def process_prompt_category(df: pd.DataFrame, category_name: str, question_column: str = "question", 
-                            agents: List[str] | None = None, max_workers: int = 100) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str]]:
+                            agents: List[str] | None = None, max_workers: int = 200) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str]]:
     """
     Process a category of prompts in parallel - ALL (prompt, agent) combinations processed simultaneously.
     
