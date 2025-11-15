@@ -283,7 +283,7 @@ def main():
     # Save results to per-agent JSON file (append if exists, create if not)
     script_dir = Path(__file__).parent
     outputs_dir = script_dir / "outputs_json"
-    
+
     # Create outputs_json folder if it doesn't exist
     outputs_dir.mkdir(exist_ok=True)
     
