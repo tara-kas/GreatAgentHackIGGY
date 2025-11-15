@@ -359,13 +359,73 @@ class ASRAnalyzer:
         self.results = {}
         self.metadata = {}
     
+    def load_results_from_jsonl(self, jsonl_path: Path) -> pd.DataFrame:
+        """Load results from JSONL file and convert to DataFrame format."""
+        rows = []
+        prompt_data = {}  # Group by prompt
+        
+        # Read JSONL file
+        with open(jsonl_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    prompt = entry.get("prompt", "")
+                    agent = entry.get("agent", "")
+                    category = entry.get("category", "")
+                    response = entry.get("response", "")
+                    judgments = entry.get("judgments", {})
+                    
+                    # Use heuristic judgment (or rules if heuristic not available)
+                    success = judgments.get("heuristic", judgments.get("rules", 0))
+                    
+                    # Initialize prompt entry if not exists
+                    if prompt not in prompt_data:
+                        prompt_data[prompt] = {
+                            "question": prompt,
+                            "category": category,
+                            "topic": category  # Use category as topic for compatibility
+                        }
+                        # Initialize all agent columns
+                        for a in self.calculator.agents:
+                            prompt_data[prompt][a] = 0
+                            prompt_data[prompt][f"{a}_response"] = ""
+                    
+                    # Set agent-specific data
+                    if agent in self.calculator.agents:
+                        prompt_data[prompt][agent] = int(success)
+                        prompt_data[prompt][f"{agent}_response"] = response
+                
+                except json.JSONDecodeError as e:
+                    print(f"Warning: Skipping invalid JSON line: {e}")
+                    continue
+        
+        # Convert to list of rows
+        rows = list(prompt_data.values())
+        df = pd.DataFrame(rows)
+        
+        return df
+    
     def load_results(self, attack_type: str) -> pd.DataFrame:
-        """Load results CSV for an attack type."""
+        """Load results CSV or JSONL for an attack type."""
+        # Try JSONL first (for HarmBench results)
+        jsonl_path = Path(__file__).parent / "HB_benchmark" / "hb_results_attempts.jsonl"
+        if jsonl_path.exists():
+            print(f"Loading results from JSONL: {jsonl_path}")
+            return self.load_results_from_jsonl(jsonl_path)
+        
+        # Fall back to CSV format
         csv_path = RESULTS_DIR / f"hle_results_{attack_type}_main.csv"
         
         if not csv_path.exists():
-            raise FileNotFoundError(f"Results file not found: {csv_path}")
+            raise FileNotFoundError(
+                f"Results file not found. Tried:\n"
+                f"  - {jsonl_path}\n"
+                f"  - {csv_path}"
+            )
         
+        print(f"Loading results from CSV: {csv_path}")
         df = pd.read_csv(csv_path)
         return df
     
@@ -402,10 +462,11 @@ class ASRAnalyzer:
         
         # Load results
         results_df = self.load_results(attack_type)
-        metadata_df = self.load_metadata(attack_type)
         
-        # Merge metadata if available
-        if metadata_df is not None:
+        # For JSONL data, category/topic is already included, so skip metadata merge
+        # For CSV data, try to merge metadata
+        metadata_df = self.load_metadata(attack_type)
+        if metadata_df is not None and "topic" not in results_df.columns:
             if attack_type == "jailbreak":
                 merge_key = "prompt"
                 results_key = "question"
@@ -441,9 +502,11 @@ class ASRAnalyzer:
         
         # Calculate ASR per harm category (if metadata available)
         category_asr = {}
-        if "topic" in results_df.columns:
-            for category in results_df["topic"].dropna().unique():
-                category_subset = results_df[results_df["topic"] == category]
+        # Use "topic" column if available, otherwise fall back to "category"
+        category_column = "topic" if "topic" in results_df.columns else "category"
+        if category_column in results_df.columns:
+            for category in results_df[category_column].dropna().unique():
+                category_subset = results_df[results_df[category_column] == category]
                 category_metrics = {}
                 
                 for agent in self.calculator.agents:
@@ -533,17 +596,34 @@ class ASRAnalyzer:
         
         all_results = {}
         
-        for attack_type in self.calculator.attack_types:
+        # Check if JSONL file exists (HarmBench format)
+        jsonl_path = Path(__file__).parent / "HB_benchmark" / "hb_results_attempts.jsonl"
+        if jsonl_path.exists():
+            # For JSONL, analyze as "harmful" (HarmBench contains harmful prompts)
+            print("\nDetected JSONL format (HarmBench). Analyzing as 'harmful' attack type...")
             try:
                 analysis = self.analyze_attack_type(
-                    attack_type,
+                    "harmful",
                     use_llm_judge=use_llm_judge,
                     max_judge_samples=max_judge_samples
                 )
-                all_results[attack_type] = analysis
+                all_results["harmful"] = analysis
             except Exception as e:
-                print(f"Error analyzing {attack_type}: {e}")
-                all_results[attack_type] = {"error": str(e)}
+                print(f"Error analyzing JSONL data: {e}")
+                all_results["harmful"] = {"error": str(e)}
+        else:
+            # For CSV format, analyze all attack types
+            for attack_type in self.calculator.attack_types:
+                try:
+                    analysis = self.analyze_attack_type(
+                        attack_type,
+                        use_llm_judge=use_llm_judge,
+                        max_judge_samples=max_judge_samples
+                    )
+                    all_results[attack_type] = analysis
+                except Exception as e:
+                    print(f"Error analyzing {attack_type}: {e}")
+                    all_results[attack_type] = {"error": str(e)}
         
         self.results = all_results
         return all_results

@@ -49,7 +49,15 @@ def check_data_files():
     """Check if required data files exist."""
     root_dir = Path(__file__).parent.parent.parent
     results_dir = root_dir / "TrackC" / "Jailbreak" / "hle-results"
+    hb_benchmark_dir = root_dir / "TrackC" / "Jailbreak" / "HB_benchmark"
     
+    # Check for JSONL file first (new format)
+    jsonl_file = hb_benchmark_dir / "hb_results_attempts.jsonl"
+    if jsonl_file.exists():
+        print(f"Found JSONL results file: {jsonl_file}")
+        return True
+    
+    # Fall back to checking CSV files (old format)
     required_files = [
         results_dir / "hle_results_benign_main.csv",
         results_dir / "hle_results_harmful_main.csv",
@@ -62,10 +70,11 @@ def check_data_files():
             missing.append(str(file_path))
     
     if missing:
-        print("WARNING: Some result files are missing:")
+        print("WARNING: No result files found:")
+        print(f"  - JSONL file not found: {jsonl_file}")
         for file_path in missing:
-            print(f"  - {file_path}")
-        print("\nRun asr_datasets.py first to generate these files.")
+            print(f"  - CSV file not found: {file_path}")
+        print("\nRun asr_datasets.py or harmbench_runner.py first to generate these files.")
         return False
     
     return True
