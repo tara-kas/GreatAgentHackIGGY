@@ -6,6 +6,7 @@ Agent Reveal Script - Tests prompt injection techniques to reveal agent technica
 import requests
 import json
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -262,9 +263,15 @@ def main():
             f"{status} {reveal} {trunc} #{result['prompt_id']:2d}: {result['prompt_name']:30s} | Status: {result['status_code']}"
         )
 
-    # Save results to file with timestamp
+    # Save results to file with timestamp in outputs_json folder
+    script_dir = Path(__file__).parent
+    outputs_dir = script_dir / "outputs_json"
+    
+    # Create outputs_json folder if it doesn't exist
+    outputs_dir.mkdir(exist_ok=True)
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"{agent_name}_reveal_results_{timestamp}.json"
+    output_file = outputs_dir / f"{agent_name}_reveal_results_{timestamp}.json"
     output_data = {
         "agent": agent_name,
         "timestamp": datetime.now().isoformat(),
