@@ -6,11 +6,13 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import List, Dict, Any, Tuple
 from pathlib import Path
+import pandas as pd
 
 # Import HLE analysis functions from hle_benchmark_runner
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from hle_benchmark_runner import make_api_call, detect_refusal, AGENTS
+from util import heuristic_judge_attack
 
 # Try to import datasets for HarmBench
 try:
@@ -46,7 +48,7 @@ def _ensure_hf_auth() -> None:
             pass
 
 
-def load_harmbench_samples(n: int | None = None, seed: int = 42) -> List[Dict[str, Any]]:
+def load_harmbench_samples(dataset_name: str = "standard", n: int | None = None, seed: int = 42) -> List[Dict[str, Any]]:
     """
     Load samples from HarmBench dataset.
     
@@ -63,7 +65,7 @@ def load_harmbench_samples(n: int | None = None, seed: int = 42) -> List[Dict[st
     _ensure_hf_auth()
     
     # Load HarmBench contextual variant
-    ds = load_dataset("walledai/HarmBench", "standard", split="train")
+    ds = load_dataset("walledai/HarmBench", dataset_name, split="train")
     cols = list(ds.column_names)
     
     has_context = 'context' in cols
@@ -141,13 +143,13 @@ def process_single_request(agent: str, question: str, prompt_idx: int) -> Tuple[
     return (prompt_idx, agent, result)
 
 
-def process_harmbench_samples(samples: List[Dict[str, Any]], 
+def process_harmbench_samples(samples: List[Dict[str, Any]] | pd.DataFrame, 
                             agents: List[str] | None = None, max_workers: int = 100) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str], List[Dict[str, Any]]]:
     """
     Process HarmBench samples in parallel - ALL (prompt, agent) combinations processed simultaneously.
     
     Args:
-        samples: List of sample dictionaries from HarmBench
+        samples: List of sample dictionaries from HarmBench OR pandas DataFrame loaded from CSV
         agents: List of agents to test (defaults to all AGENTS)
         max_workers: Maximum number of parallel workers (all requests sent simultaneously)
     
@@ -156,6 +158,77 @@ def process_harmbench_samples(samples: List[Dict[str, Any]],
     """
     if agents is None:
         agents = AGENTS
+    
+    # Convert DataFrame to list of dicts if needed
+    if isinstance(samples, pd.DataFrame):
+        # Find prompt/question column
+        prompt_col = None
+        for col in ["prompt", "question", "attack", "input", "text"]:
+            if col in samples.columns:
+                prompt_col = col
+                break
+        
+        if prompt_col is None:
+            # Try to find first string column
+            for col in samples.columns:
+                if samples[col].dtype == 'object' and len(samples) > 0:
+                    if isinstance(samples[col].iloc[0], str):
+                        prompt_col = col
+                        break
+        
+        if prompt_col is None:
+            raise ValueError(f"Could not find prompt/question column in DataFrame. Available columns: {list(samples.columns)}")
+        
+        # Find category column if it exists
+        category_col = None
+        for col in ["category", "topic", "harm_category"]:
+            if col in samples.columns:
+                category_col = col
+                break
+        
+        # Convert DataFrame to list of dicts
+        samples_list = []
+        for idx, row in samples.iterrows():
+            # Get prompt value (iterrows returns Series, so access is scalar)
+            prompt_value = row[prompt_col]
+            # Skip rows with missing or empty prompts
+            # Use try/except to handle pd.isna() type checking issues
+            try:
+                is_na = pd.isna(prompt_value)
+                if is_na if not hasattr(is_na, '__iter__') else bool(is_na):
+                    continue
+            except (TypeError, ValueError):
+                if prompt_value is None:
+                    continue
+            if isinstance(prompt_value, str) and not prompt_value.strip():
+                continue
+            
+            # Get category value if column exists
+            category_value = None
+            if category_col is not None:
+                cat_val = row[category_col]
+                try:
+                    is_na = pd.isna(cat_val)
+                    is_null = is_na if not hasattr(is_na, '__iter__') else bool(is_na)
+                    if not is_null and cat_val is not None:
+                        if isinstance(cat_val, str) and cat_val.strip():
+                            category_value = cat_val
+                        elif not isinstance(cat_val, str):
+                            category_value = str(cat_val)
+                except (TypeError, ValueError):
+                    if cat_val is not None:
+                        if isinstance(cat_val, str) and cat_val.strip():
+                            category_value = cat_val
+                        elif not isinstance(cat_val, str):
+                            category_value = str(cat_val)
+            
+            sample_dict = {
+                "prompt": str(prompt_value),
+                "category": category_value
+            }
+            samples_list.append(sample_dict)
+        
+        samples = samples_list
     
     # Prepare CSV fieldnames
     main_fieldnames = ["question"]
@@ -210,11 +283,23 @@ def process_harmbench_samples(samples: List[Dict[str, Any]],
                 # Check if this is a timeout - skip saving to JSONL if so
                 is_timeout = error is not None and "timeout" in str(error).lower()
                 
-                refused = detect_refusal(text or "") if error is None and status == 200 else True
-                success = 0 if refused else 1
+                # Use improved heuristic judgment that checks for useful information
+                response_text = text or ""
+                if error is None and status == 200:
+                    # Use improved heuristic judgment from util.py
+                    heuristic_result = heuristic_judge_attack(response_text)
+                    heuristic_success = 1 if heuristic_result.get("attack_succeeded", False) else 0
+                else:
+                    # If there's an error or non-200 status, attack failed
+                    heuristic_success = 0
+                
+                # Also check refusal for backward compatibility
+                refused = detect_refusal(response_text) if error is None and status == 200 else True
+                # Use heuristic judgment result, not just refusal check
+                success = heuristic_success
                 
                 main_rows[prompt_idx][agent] = str(success)
-                main_rows[prompt_idx][f"{agent}_response"] = (text or "")[:500]
+                main_rows[prompt_idx][f"{agent}_response"] = response_text[:500]
                 diag_rows[prompt_idx][f"{agent}_status"] = str(status) if status is not None else ""
                 diag_rows[prompt_idx][f"{agent}_latency_ms"] = str(latency) if latency is not None else ""
                 
@@ -227,9 +312,9 @@ def process_harmbench_samples(samples: List[Dict[str, Any]],
                         "status": status,
                         "latency_ms": latency,
                         "error": error,
-                        "response": text or "",
+                        "response": response_text,
                         "judgments": {
-                            "heuristic": 1 if not refused else 0,
+                            "heuristic": heuristic_success,
                             "rules": 0  # Rules-based judgment not implemented yet
                         }
                     }
@@ -320,6 +405,12 @@ def write_results(main_rows: List[Dict[str, Any]], diag_rows: List[Dict[str, Any
         print(f"    - {a}: {asr:.2f}")
 
 
+def load_csv_samples(csv_path: Path) -> pd.DataFrame:
+    """
+    Load samples from CSV file.
+    """
+    return pd.read_csv(csv_path)
+
 def main(n_samples: int | None = None, seed: int = 42):
     """
     Run HarmBench evaluation.
@@ -337,7 +428,11 @@ def main(n_samples: int | None = None, seed: int = 42):
         print(f"\nLoading all HarmBench samples from dataset...")
     else:
         print(f"\nLoading HarmBench samples (n={n_samples}, seed={seed})...")
-    samples = load_harmbench_samples(n=n_samples, seed=seed)
+
+    #samples = load_harmbench_samples(dataset_name="standard", n=n_samples, seed=seed)
+
+    samples = load_csv_samples(csv_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "jailbreak_prompts.csv")
+
     print(f"  Loaded {len(samples)} samples")
     
     # Process all samples
