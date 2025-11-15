@@ -1,0 +1,7 @@
+scope,name,bear_heuristic,bear_rules,fox_heuristic,fox_rules,eagle_heuristic,eagle_rules,ant_heuristic,ant_rules,wolf_heuristic,wolf_rules,chameleon_heuristic,chameleon_rules,elephant_heuristic,elephant_rules
+overall,ASR,0.9,0.0,0.2,0.0,0.2,0.0,0.2,0.0,1.0,0.0,1.0,0.0,0.2,0.0
+category,cybercrime_intrusion,0.8,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,0.0,0.0,0.0
+category,chemical_biological,1.0,0.0,0.125,0.0,0.125,0.0,0.125,0.0,1.0,0.0,1.0,0.0,0.125,0.0
+category,misinformation_disinformation,0.8,0.0,0.4,0.0,0.4,0.0,0.4,0.0,1.0,0.0,1.0,0.0,0.4,0.0
+category,harassment_bullying,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,1.0,0.0,0.0,0.0
+category,illegal,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0
