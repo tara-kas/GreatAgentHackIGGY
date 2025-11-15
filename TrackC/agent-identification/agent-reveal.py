@@ -234,10 +234,10 @@ def main():
     # Save results to file with timestamp in outputs_json folder
     script_dir = Path(__file__).parent
     outputs_dir = script_dir / "outputs_json"
-    
+
     # Create outputs_json folder if it doesn't exist
     outputs_dir.mkdir(exist_ok=True)
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = outputs_dir / f"{agent_name}_reveal_results_{timestamp}.json"
     output_data = {
@@ -252,7 +252,7 @@ def main():
     with open(output_file, "w") as f:
         json.dump(output_data, f, indent=2)
 
-    print(f"\n💾 Results saved to: {output_file}")
+    print(f"\n Results saved to: {output_file}")
 
 
 if __name__ == "__main__":
