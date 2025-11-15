@@ -122,35 +122,13 @@ def test_prompt(agent_name, prompt_data):
         response = requests.post(url, headers=HEADERS, json=payload, timeout=30)
         print(f"\nStatus Code: {response.status_code}")
 
-        # Store raw response for analysis
-        raw_response_text = response.text
-        raw_response_length = len(raw_response_text)
-        
         # Parse response
         try:
             response_json = response.json()
             response_text = json.dumps(response_json, indent=2)
-            
-            # Check for truncation in the inner response
-            inner_response = response_json.get("response", "")
-            is_truncated = False
-            if isinstance(inner_response, str):
-                # Check for common truncation indicators
-                if inner_response.endswith("...") or inner_response.endswith("…"):
-                    is_truncated = True
-                # Check if response seems cut off mid-word or mid-sentence
-                if len(inner_response) > 0 and not inner_response[-1] in ".!?\"'":
-                    # Check if it ends with incomplete word (common truncation pattern)
-                    if "..." in inner_response[-10:] or "…" in inner_response[-10:]:
-                        is_truncated = True
-            
             print(f"Response (JSON):\n{response_text}")
-            if is_truncated:
-                print(f"\n⚠️  WARNING: Response appears to be truncated!")
-                print(f"   Inner response length: {len(inner_response)} characters")
         except json.JSONDecodeError:
-            response_text = raw_response_text
-            is_truncated = False
+            response_text = response.text
             print(f"Response (Text):\n{response_text}")
 
         # Check if response contains revealing information
@@ -161,9 +139,6 @@ def test_prompt(agent_name, prompt_data):
             "prompt_name": prompt_data["name"],
             "status_code": response.status_code,
             "response": response_text,
-            "response_length": raw_response_length,
-            "is_truncated": is_truncated,
-            "response_headers": dict(response.headers),
             "reveals_info": reveals_info,
             "success": response.status_code == 200,
         }
@@ -236,16 +211,10 @@ def main():
 
     successful = [r for r in results if r["success"]]
     reveals = [r for r in results if r["reveals_info"]]
-    truncated = [r for r in results if r.get("is_truncated", False)]
 
     print(f"\nTotal Prompts Tested: {len(results)}")
     print(f"Successful Requests: {len(successful)}")
     print(f"Potential Information Reveals: {len(reveals)}")
-    print(f"Truncated Responses: {len(truncated)}")
-    
-    if truncated:
-        print(f"\n⚠️  WARNING: {len(truncated)} responses were truncated by the API")
-        print("   This may indicate API response length limits or intentional truncation")
 
     if reveals:
         print("\n🔍 Prompts that may have revealed information:")
@@ -258,9 +227,8 @@ def main():
     for result in results:
         status = "✓" if result["success"] else "✗"
         reveal = "🔍" if result["reveals_info"] else "  "
-        trunc = "⚠️" if result.get("is_truncated", False) else "  "
         print(
-            f"{status} {reveal} {trunc} #{result['prompt_id']:2d}: {result['prompt_name']:30s} | Status: {result['status_code']}"
+            f"{status} {reveal} #{result['prompt_id']:2d}: {result['prompt_name']:30s} | Status: {result['status_code']}"
         )
 
     # Save results to file with timestamp in outputs_json folder
