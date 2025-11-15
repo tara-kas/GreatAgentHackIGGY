@@ -18,6 +18,7 @@ endpoints = [
     ("ant", "🐜"),
     ("wolf", "🐺"),
     ("chameleon", "🦎"),
+    ("elephant", "🐘")
 ]
 
 
