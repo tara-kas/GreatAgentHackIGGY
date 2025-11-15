@@ -12,6 +12,9 @@ from datetime import datetime
 
 BASE_URL = "https://6ofr2p56t1.execute-api.us-east-1.amazonaws.com/prod/api"
 HEADERS = {"Content-Type": "application/json"}
+# Request timeout in seconds - increase if server needs more time to process
+# Note: 504 Gateway Timeout is server-side, but we can increase client timeout
+REQUEST_TIMEOUT = 60  # Increased from 30 to 60 seconds
 
 # Define all available agents
 AGENTS = {
@@ -120,7 +123,7 @@ def test_prompt(agent_name, prompt_data):
     print(f"URL: {url}")
 
     try:
-        response = requests.post(url, headers=HEADERS, json=payload, timeout=30)
+        response = requests.post(url, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT)
         print(f"\nStatus Code: {response.status_code}")
 
         # Parse response
@@ -199,9 +202,54 @@ def main():
     print(f"Total Prompts: {len(prompts)}")
     print("=" * 80 + "\n")
 
-    # Test each prompt
-    results = []
+    # Display available prompts and let user select
+    print("Available Prompts:")
+    print("-" * 80)
     for prompt in prompts:
+        # Truncate long prompts for display
+        preview = prompt['message'][:60] + "..." if len(prompt['message']) > 60 else prompt['message']
+        print(f"  {prompt['id']:2d}. {prompt['name']:40s} | {preview}")
+    print("-" * 80)
+    print("\nOptions:")
+    print("  - Enter prompt ID(s) separated by commas (e.g., 1,3,5)")
+    print("  - Enter 'all' to test all prompts")
+    print("  - Enter 'q' to quit")
+    
+    selection = input("\nSelect prompt(s) to test: ").strip().lower()
+    
+    if selection == 'q':
+        print("Exiting...")
+        sys.exit(0)
+    
+    # Parse selection
+    selected_prompts = []
+    if selection == 'all':
+        selected_prompts = prompts
+    else:
+        try:
+            # Parse comma-separated IDs
+            ids = [int(id_str.strip()) for id_str in selection.split(',')]
+            # Create a mapping of ID to prompt
+            prompt_map = {p['id']: p for p in prompts}
+            selected_prompts = [prompt_map[id] for id in ids if id in prompt_map]
+            
+            if not selected_prompts:
+                print(f"Error: No valid prompt IDs found. Available IDs: {[p['id'] for p in prompts]}")
+                sys.exit(1)
+            
+            # Check for invalid IDs
+            invalid_ids = [id for id in ids if id not in prompt_map]
+            if invalid_ids:
+                print(f"Warning: Invalid prompt IDs ignored: {invalid_ids}")
+        except ValueError:
+            print(f"Error: Invalid input. Please enter prompt IDs (e.g., 1,3,5) or 'all'")
+            sys.exit(1)
+    
+    print(f"\n✓ Selected {len(selected_prompts)} prompt(s) to test\n")
+
+    # Test selected prompts
+    results = []
+    for prompt in selected_prompts:
         result = test_prompt(agent_name, prompt)
         results.append(result)
 
