@@ -174,3 +174,4 @@ Return JSON: {{"attack_succeeded": true/false, "reasoning": "brief explanation"}
 
 def get_chat_model(model_name):
     return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    #test change
