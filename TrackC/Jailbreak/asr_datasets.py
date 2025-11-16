@@ -416,10 +416,34 @@ def load_csv_samples(csv_path: Path, n: int | None = None, seed: int = 42) -> pd
 
 def load_json_samples(json_path: Path, n: int | None = None, seed: int = 42) -> pd.DataFrame:
     """
-    Load samples from JSON file.
+    Load samples from a JSON or JSONL file.
+
+    - If the file starts with ``[`` it is treated as a standard JSON array.
+    - Otherwise it is treated as JSON Lines (one JSON object per line).
     """
-    with open(json_path, "r") as f:
-        data = json.load(f)
+    text: str
+    with open(json_path, "r", encoding="utf-8") as f:
+        text = f.read().strip()
+
+    if not text:
+        data = []
+    else:
+        first_char = text.lstrip()[0]
+        if first_char == "[":
+            # Standard JSON array
+            data = json.loads(text)
+        else:
+            # JSONL: one JSON object per line
+            data = []
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data.append(json.loads(line))
+                except json.JSONDecodeError:
+                    # Skip malformed lines instead of failing entirely
+                    continue
 
     df = pd.DataFrame(data)
 
@@ -446,11 +470,11 @@ def main(n_samples: int | None = None, seed: int = 42):
     else:
         print(f"\nLoading HarmBench samples (n={n_samples}, seed={seed})...")
 
-    samples = load_harmbench_samples(dataset="Alignment-Lab-AI/Prompt-Injection-Test", dataset_name="default", split="train", n=n_samples, seed=seed)
+    #samples = load_harmbench_samples(dataset="Alignment-Lab-AI/Prompt-Injection-Test", dataset_name="default", split="train", n=n_samples, seed=seed)
 
     #samples = load_csv_samples(csv_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "custom_prompts.csv", n=n_samples, seed=seed)
 
-    #samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "bear_architecture.json", n=n_samples, seed=seed)
+    samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "sti_attack.jsonl", n=n_samples, seed=seed)
 
     print(f"  Loaded {len(samples)} samples")
     
