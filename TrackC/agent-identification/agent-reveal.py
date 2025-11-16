@@ -123,7 +123,9 @@ def test_prompt(agent_name, prompt_data):
     print(f"URL: {url}")
 
     try:
-        response = requests.post(url, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT)
+        response = requests.post(
+            url, headers=HEADERS, json=payload, timeout=REQUEST_TIMEOUT
+        )
         print(f"\nStatus Code: {response.status_code}")
 
         # Parse response
@@ -207,44 +209,52 @@ def main():
     print("-" * 80)
     for prompt in prompts:
         # Truncate long prompts for display
-        preview = prompt['message'][:60] + "..." if len(prompt['message']) > 60 else prompt['message']
+        preview = (
+            prompt["message"][:60] + "..."
+            if len(prompt["message"]) > 60
+            else prompt["message"]
+        )
         print(f"  {prompt['id']:2d}. {prompt['name']:40s} | {preview}")
     print("-" * 80)
     print("\nOptions:")
     print("  - Enter prompt ID(s) separated by commas (e.g., 1,3,5)")
     print("  - Enter 'all' to test all prompts")
     print("  - Enter 'q' to quit")
-    
+
     selection = input("\nSelect prompt(s) to test: ").strip().lower()
-    
-    if selection == 'q':
+
+    if selection == "q":
         print("Exiting...")
         sys.exit(0)
-    
+
     # Parse selection
     selected_prompts = []
-    if selection == 'all':
+    if selection == "all":
         selected_prompts = prompts
     else:
         try:
             # Parse comma-separated IDs
-            ids = [int(id_str.strip()) for id_str in selection.split(',')]
+            ids = [int(id_str.strip()) for id_str in selection.split(",")]
             # Create a mapping of ID to prompt
-            prompt_map = {p['id']: p for p in prompts}
+            prompt_map = {p["id"]: p for p in prompts}
             selected_prompts = [prompt_map[id] for id in ids if id in prompt_map]
-            
+
             if not selected_prompts:
-                print(f"Error: No valid prompt IDs found. Available IDs: {[p['id'] for p in prompts]}")
+                print(
+                    f"Error: No valid prompt IDs found. Available IDs: {[p['id'] for p in prompts]}"
+                )
                 sys.exit(1)
-            
+
             # Check for invalid IDs
             invalid_ids = [id for id in ids if id not in prompt_map]
             if invalid_ids:
                 print(f"Warning: Invalid prompt IDs ignored: {invalid_ids}")
         except ValueError:
-            print(f"Error: Invalid input. Please enter prompt IDs (e.g., 1,3,5) or 'all'")
+            print(
+                f"Error: Invalid input. Please enter prompt IDs (e.g., 1,3,5) or 'all'"
+            )
             sys.exit(1)
-    
+
     print(f"\n✓ Selected {len(selected_prompts)} prompt(s) to test\n")
 
     # Test selected prompts
@@ -286,10 +296,10 @@ def main():
 
     # Create outputs_json folder if it doesn't exist
     outputs_dir.mkdir(exist_ok=True)
-    
+
     # Use agent-specific filename (no timestamp - append to same file)
     output_file = outputs_dir / f"{agent_name}_reveal_results.json"
-    
+
     # Prepare new run data
     new_run_data = {
         "run_timestamp": datetime.now().isoformat(),
@@ -298,13 +308,13 @@ def main():
         "reveals": len(reveals),
         "results": results,
     }
-    
+
     # Load existing data if file exists
     if output_file.exists():
         try:
             with open(output_file, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
-            
+
             # Ensure it's a list of runs
             if isinstance(existing_data, dict):
                 # Old format - convert to new format
@@ -317,16 +327,16 @@ def main():
                 runs = existing_data
             else:
                 runs = []
-            
+
             # Append new run
             runs.append(new_run_data)
-            
+
             # Prepare output data
             output_data = {
                 "agent": agent_name,
                 "last_updated": datetime.now().isoformat(),
                 "total_runs": len(runs),
-                "runs": runs
+                "runs": runs,
             }
         except (json.JSONDecodeError, IOError) as e:
             print(f"Warning: Could not load existing file {output_file}: {e}")
@@ -336,7 +346,7 @@ def main():
                 "agent": agent_name,
                 "last_updated": datetime.now().isoformat(),
                 "total_runs": 1,
-                "runs": [new_run_data]
+                "runs": [new_run_data],
             }
     else:
         # Create new file structure
@@ -344,13 +354,13 @@ def main():
             "agent": agent_name,
             "last_updated": datetime.now().isoformat(),
             "total_runs": 1,
-            "runs": [new_run_data]
+            "runs": [new_run_data],
         }
-    
+
     # Save to file
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
-    
+
     print(f"\n💾 Results saved to: {output_file}")
     print(f"   Total runs for {agent_name}: {output_data['total_runs']}")
 
