@@ -48,7 +48,7 @@ def _ensure_hf_auth() -> None:
             pass
 
 
-def load_harmbench_samples(dataset_name: str = "standard", n: int | None = None, seed: int = 42) -> List[Dict[str, Any]]:
+def load_harmbench_samples(dataset: str, dataset_name: str, split: str, n: int | None = None, seed: int = 42) -> List[Dict[str, Any]]:
     """
     Load samples from HarmBench dataset.
     
@@ -65,7 +65,7 @@ def load_harmbench_samples(dataset_name: str = "standard", n: int | None = None,
     _ensure_hf_auth()
     
     # Load HarmBench contextual variant
-    ds = load_dataset("walledai/HarmBench", dataset_name, split="train")
+    ds = load_dataset(dataset, dataset_name, split=split)
     cols = list(ds.column_names)
     
     has_context = 'context' in cols
@@ -144,7 +144,7 @@ def process_single_request(agent: str, question: str, prompt_idx: int) -> Tuple[
 
 
 def process_harmbench_samples(samples: List[Dict[str, Any]] | pd.DataFrame, 
-                            agents: List[str] | None = None, max_workers: int = 100) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str], List[Dict[str, Any]]]:
+                            agents: List[str] | None = None, max_workers: int = 10) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str], List[Dict[str, Any]]]:
     """
     Process HarmBench samples in parallel - ALL (prompt, agent) combinations processed simultaneously.
     
@@ -405,11 +405,28 @@ def write_results(main_rows: List[Dict[str, Any]], diag_rows: List[Dict[str, Any
         print(f"    - {a}: {asr:.2f}")
 
 
-def load_csv_samples(csv_path: Path) -> pd.DataFrame:
+def load_csv_samples(csv_path: Path, n: int | None = None, seed: int = 42) -> pd.DataFrame:
     """
     Load samples from CSV file.
     """
-    return pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path)
+    if n is not None:
+        df = df.sample(n=n, random_state=seed)
+    return df
+
+def load_json_samples(json_path: Path, n: int | None = None, seed: int = 42) -> pd.DataFrame:
+    """
+    Load samples from JSON file.
+    """
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    df = pd.DataFrame(data)
+
+    if n is not None and n <= len(df):
+        df = df.sample(n=n, random_state=seed)
+
+    return df
 
 def main(n_samples: int | None = None, seed: int = 42):
     """
@@ -429,9 +446,11 @@ def main(n_samples: int | None = None, seed: int = 42):
     else:
         print(f"\nLoading HarmBench samples (n={n_samples}, seed={seed})...")
 
-    #samples = load_harmbench_samples(dataset_name="standard", n=n_samples, seed=seed)
+    #samples = load_harmbench_samples(dataset="Alignment-Lab-AI/Prompt-Injection-Test", dataset_name="default", split="train", n=n_samples, seed=seed)
 
-    samples = load_csv_samples(csv_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "jailbreak_prompts.csv")
+    #samples = load_csv_samples(csv_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "custom_prompts.csv", n=n_samples, seed=seed)
+
+    samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "bear_architecture.json", n=n_samples, seed=seed)
 
     print(f"  Loaded {len(samples)} samples")
     
@@ -448,19 +467,4 @@ def main(n_samples: int | None = None, seed: int = 42):
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Run HarmBench evaluation")
-    parser.add_argument(
-        "--n-samples",
-        type=int,
-        default=None,
-        help="Number of samples to process (default: all samples in dataset)"
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed for sampling (default: 42)"
-    )
-    args = parser.parse_args()
-    main(n_samples=args.n_samples, seed=args.seed)
+    main(n_samples=200, seed=42)
