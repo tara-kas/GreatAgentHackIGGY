@@ -14,7 +14,7 @@ BASE_URL = "https://6ofr2p56t1.execute-api.us-east-1.amazonaws.com/prod/api"
 HEADERS = {"Content-Type": "application/json"}
 # Request timeout in seconds - increase if server needs more time to process
 # Note: 504 Gateway Timeout is server-side, but we can increase client timeout
-REQUEST_TIMEOUT = 60  # Increased from 30 to 60 seconds
+REQUEST_TIMEOUT = 90  # Increased from 30 to 60 seconds
 
 # Define all available agents
 AGENTS = {
@@ -280,28 +280,79 @@ def main():
             f"{status} {reveal} #{result['prompt_id']:2d}: {result['prompt_name']:30s} | Status: {result['status_code']}"
         )
 
-    # Save results to file with timestamp in outputs_json folder
+    # Save results to per-agent JSON file (append if exists, create if not)
     script_dir = Path(__file__).parent
     outputs_dir = script_dir / "outputs_json"
 
     # Create outputs_json folder if it doesn't exist
     outputs_dir.mkdir(exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = outputs_dir / f"{agent_name}_reveal_results_{timestamp}.json"
-    output_data = {
-        "agent": agent_name,
-        "timestamp": datetime.now().isoformat(),
+    
+    # Use agent-specific filename (no timestamp - append to same file)
+    output_file = outputs_dir / f"{agent_name}_reveal_results.json"
+    
+    # Prepare new run data
+    new_run_data = {
+        "run_timestamp": datetime.now().isoformat(),
         "total_prompts": len(results),
         "successful": len(successful),
         "reveals": len(reveals),
         "results": results,
     }
-
-    with open(output_file, "w") as f:
-        json.dump(output_data, f, indent=2)
-
-    print(f"\n Results saved to: {output_file}")
+    
+    # Load existing data if file exists
+    if output_file.exists():
+        try:
+            with open(output_file, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+            
+            # Ensure it's a list of runs
+            if isinstance(existing_data, dict):
+                # Old format - convert to new format
+                if "runs" in existing_data:
+                    runs = existing_data["runs"]
+                else:
+                    # Single run in old format, convert to list
+                    runs = [existing_data]
+            elif isinstance(existing_data, list):
+                runs = existing_data
+            else:
+                runs = []
+            
+            # Append new run
+            runs.append(new_run_data)
+            
+            # Prepare output data
+            output_data = {
+                "agent": agent_name,
+                "last_updated": datetime.now().isoformat(),
+                "total_runs": len(runs),
+                "runs": runs
+            }
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Could not load existing file {output_file}: {e}")
+            print("Creating new file...")
+            # Create new file structure
+            output_data = {
+                "agent": agent_name,
+                "last_updated": datetime.now().isoformat(),
+                "total_runs": 1,
+                "runs": [new_run_data]
+            }
+    else:
+        # Create new file structure
+        output_data = {
+            "agent": agent_name,
+            "last_updated": datetime.now().isoformat(),
+            "total_runs": 1,
+            "runs": [new_run_data]
+        }
+    
+    # Save to file
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n💾 Results saved to: {output_file}")
+    print(f"   Total runs for {agent_name}: {output_data['total_runs']}")
 
 
 if __name__ == "__main__":
