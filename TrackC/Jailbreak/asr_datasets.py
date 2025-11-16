@@ -144,7 +144,7 @@ def process_single_request(agent: str, question: str, prompt_idx: int) -> Tuple[
 
 
 def process_harmbench_samples(samples: List[Dict[str, Any]] | pd.DataFrame, 
-                            agents: List[str] | None = None, max_workers: int = 10) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str], List[Dict[str, Any]]]:
+                            agents: List[str] | None = None, max_workers: int = 100) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], List[str], List[Dict[str, Any]]]:
     """
     Process HarmBench samples in parallel - ALL (prompt, agent) combinations processed simultaneously.
     
@@ -446,11 +446,11 @@ def main(n_samples: int | None = None, seed: int = 42):
     else:
         print(f"\nLoading HarmBench samples (n={n_samples}, seed={seed})...")
 
-    #samples = load_harmbench_samples(dataset="Alignment-Lab-AI/Prompt-Injection-Test", dataset_name="default", split="train", n=n_samples, seed=seed)
+    samples = load_harmbench_samples(dataset="Alignment-Lab-AI/Prompt-Injection-Test", dataset_name="default", split="train", n=n_samples, seed=seed)
 
     #samples = load_csv_samples(csv_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "custom_prompts.csv", n=n_samples, seed=seed)
 
-    samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "bear_architecture.json", n=n_samples, seed=seed)
+    #samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "bear_architecture.json", n=n_samples, seed=seed)
 
     print(f"  Loaded {len(samples)} samples")
     
