@@ -20,7 +20,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 
 BASE_URL = "https://6ofr2p56t1.execute-api.us-east-1.amazonaws.com/prod/api"
@@ -50,13 +50,21 @@ MODEL_ALIASES = {
     "claude-3.5-sonnet": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "claude-3-5-sonnet-20240620": "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-    # Llama models
+    # Llama 3.2 11B models
     "llama3.2": "us.meta.llama3-2-11b-instruct-v1:0",
     "llama 3.2": "us.meta.llama3-2-11b-instruct-v1:0",
     "llama3.2-11b": "us.meta.llama3-2-11b-instruct-v1:0",
     "llama 3.2 11b": "us.meta.llama3-2-11b-instruct-v1:0",
     "meta llama 3.2": "us.meta.llama3-2-11b-instruct-v1:0",
     "us.meta.llama3-2-11b-instruct-v1:0": "us.meta.llama3-2-11b-instruct-v1:0",
+    # Llama 3.3 70B models
+    "llama3.3": "us.meta.llama3-3-70b-instruct-v1:0",
+    "llama 3.3": "us.meta.llama3-3-70b-instruct-v1:0",
+    "llama3.3-70b": "us.meta.llama3-3-70b-instruct-v1:0",
+    "llama 3.3 70b": "us.meta.llama3-3-70b-instruct-v1:0",
+    "llama3.3-70b-instruct": "us.meta.llama3-3-70b-instruct-v1:0",
+    "meta llama 3.3": "us.meta.llama3-3-70b-instruct-v1:0",
+    "us.meta.llama3-3-70b-instruct-v1:0": "us.meta.llama3-3-70b-instruct-v1:0",
 }
 
 
@@ -71,7 +79,7 @@ def resolve_model_name(raw_name):
 
 
 MODEL_NAME = resolve_model_name(
-    _getenv_trimmed("HOLISTIC_AI_MODEL_NAME", "us.meta.llama3-2-11b-instruct-v1:0")
+    _getenv_trimmed("HOLISTIC_AI_MODEL_NAME", "us.meta.llama3-3-70b-instruct-v1:0")
 )
 print(f"HOLISTIC_AI_MODEL_NAME: {MODEL_NAME}")
 DEFAULT_PAIR_ITERATIONS = int(_getenv_trimmed("ITERATIONS", "3"))
@@ -148,24 +156,47 @@ def parse_args():
         action="store_true",
         help="Skip the PAIR refinement loop (defaults to running PAIR).",
     )
+    parser.add_argument(
+        "--test-all",
+        action="store_true",
+        help="Test all prompts from the JSON file (only works with --no-pair).",
+    )
+    parser.add_argument(
+        "--prompts-file",
+        type=str,
+        default="sti_test_sample.json",
+        help="JSON file containing prompts (default: sti_test_sample.json with 50 attacks, or use sti_prompts_simple.json for all 185)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=30,
+        help="Timeout in seconds for agent API calls (default: 30)",
+    )
     return parser.parse_args()
 
 
-def load_prompts():
+def load_prompts(filename="sti_test_sample.json"):
     """Load prompt injection techniques from JSON file (same as agent-reveal)."""
     script_dir = Path(__file__).parent
-    prompts_file = script_dir / "jailbreak_prompts.json"
+    prompts_file = script_dir / filename
 
     if not prompts_file.exists():
-        print(f"Error: prompts.json not found at {prompts_file}")
+        print(f"Error: {filename} not found at {prompts_file}")
         sys.exit(1)
 
     with open(prompts_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    # Handle dict with "prompts" key
     if isinstance(data, dict) and "prompts" in data:
         return data["prompts"]
 
+    # Handle dict with "attacks" key (sti_test_sample.json format)
+    if isinstance(data, dict) and "attacks" in data:
+        data = data["attacks"]
+
+    # Handle list format
     if isinstance(data, list):
         normalized = []
         for idx, item in enumerate(data, start=1):
@@ -174,7 +205,10 @@ def load_prompts():
                 continue
             normalized.append(
                 {
-                    "id": item.get("id", idx),
+                    "id": item.get("id")
+                    or item.get("test_id")
+                    or item.get("original_id")
+                    or idx,
                     "name": item.get("topic") or item.get("name") or f"Prompt {idx}",
                     "message": message,
                 }
@@ -198,7 +232,7 @@ def call_agent_api(agent_name: str, message: str, timeout: int = 30):
     return response.status_code, response_text
 
 
-def test_prompt(agent_name, prompt_data):
+def test_prompt(agent_name, prompt_data, timeout=30):
     """Test a single prompt injection technique on an agent."""
     print("\n" + "=" * 80)
     print(f"Prompt #{prompt_data['id']}: {prompt_data['name']}")
@@ -207,7 +241,9 @@ def test_prompt(agent_name, prompt_data):
     print(f"URL: {BASE_URL}/{agent_name}")
 
     try:
-        status_code, response_text = call_agent_api(agent_name, prompt_data["message"])
+        status_code, response_text = call_agent_api(
+            agent_name, prompt_data["message"], timeout=timeout
+        )
         print(f"\nStatus Code: {status_code}")
         print(f"Response:\n{response_text}")
 
@@ -348,7 +384,7 @@ class PairLLM:
         return text.strip()
 
 
-def run_pair_attack(agent_name, seed_prompt, iterations):
+def run_pair_attack(agent_name, seed_prompt, iterations, timeout=30):
     try:
         pair_llm = PairLLM(API_URL, API_TOKEN, TEAM_ID, MODEL_NAME)
     except RuntimeError as exc:
@@ -401,7 +437,9 @@ def run_pair_attack(agent_name, seed_prompt, iterations):
         print("-" * 80)
 
         try:
-            status_code, response_text = call_agent_api(agent_name, refined)
+            status_code, response_text = call_agent_api(
+                agent_name, refined, timeout=timeout
+            )
         except requests.exceptions.RequestException as exc:
             status_code = None
             response_text = str(exc)
@@ -458,40 +496,62 @@ def main():
         print(f"Available agents: {', '.join(AGENTS.keys())}")
         sys.exit(1)
 
-    # Determine seed prompt source (manual message or prompt from JSON)
-    if args.message:
+    # Load prompts from JSON
+    print(f"Loading prompt injection techniques from {args.prompts_file}...")
+    prompts = load_prompts(args.prompts_file)
+    print(f"Loaded {len(prompts)} prompt injection techniques\n")
+
+    # Determine which prompts to test
+    if args.test_all and args.no_pair:
+        # Test all prompts without PAIR
+        prompts_to_test = prompts
+        print(f"Testing ALL {len(prompts)} prompts (no PAIR refinement)\n")
+    elif args.message:
         # Use manually provided message
-        seed_prompt = {
-            "id": "custom",
-            "name": "Custom Message",
-            "message": args.message,
-        }
+        prompts_to_test = [
+            {
+                "id": "custom",
+                "name": "Custom Message",
+                "message": args.message,
+            }
+        ]
         print("Using custom message as seed prompt\n")
     else:
-        # Load prompts from JSON
-        print("Loading prompt injection techniques...")
-        prompts = load_prompts()
-        print(f"Loaded {len(prompts)} prompt injection techniques\n")
-
+        # Use single prompt from JSON
         seed_prompt = next(
             (p for p in prompts if p["id"] == args.pair_prompt_id),
             prompts[0],
         )
+        prompts_to_test = [seed_prompt]
 
     emoji = AGENTS[agent_name]
     print("=" * 80)
     print(f"Testing Agent: {agent_name.upper()} {emoji}")
     print(f"Base URL: {BASE_URL}")
-    print(f"Prompt #{seed_prompt['id']}: {seed_prompt['name']}")
+    if len(prompts_to_test) == 1:
+        print(f"Prompt #{prompts_to_test[0]['id']}: {prompts_to_test[0]['name']}")
+    else:
+        print(f"Testing {len(prompts_to_test)} prompts")
     print("=" * 80 + "\n")
 
-    print(">>> BASE ATTEMPT")
-    base_result = test_prompt(agent_name, seed_prompt)
-    results = [base_result]
+    results = []
+
+    # Test all selected prompts
+    for idx, prompt_data in enumerate(prompts_to_test, 1):
+        if len(prompts_to_test) > 1:
+            print(f"\n>>> TESTING PROMPT {idx}/{len(prompts_to_test)}")
+        else:
+            print(">>> BASE ATTEMPT")
+
+        result = test_prompt(agent_name, prompt_data, timeout=args.timeout)
+        results.append(result)
 
     pair_summary = None
-    if not args.no_pair:
-        pair_summary = run_pair_attack(agent_name, seed_prompt, args.pair_iterations)
+    # Only run PAIR if testing a single prompt and --no-pair is not set
+    if not args.no_pair and len(prompts_to_test) == 1:
+        pair_summary = run_pair_attack(
+            agent_name, prompts_to_test[0], args.pair_iterations, timeout=args.timeout
+        )
         if pair_summary:
             print("=" * 80)
             print("PAIR Summary")
@@ -502,6 +562,10 @@ def main():
                 f"ASR: {pair_summary['asr']:.1f}% "
                 f"({pair_summary['success_count']}/{pair_summary['iterations']})"
             )
+    elif not args.no_pair and len(prompts_to_test) > 1:
+        print(
+            "\n⚠️  PAIR attack skipped when testing multiple prompts (use --no-pair to suppress this message)"
+        )
 
     successful = [r for r in results if r["success"]]
     reveals = [r for r in results if r["reveals_info"]]
@@ -514,33 +578,45 @@ def main():
     print(f"Potential Information Reveals: {len(reveals)}")
 
     if reveals:
-        print("\n🔍 Prompt revealed information:")
+        print("\n🔍 Prompts that revealed information:")
         for result in reveals:
             print(f"  ✓ #{result['prompt_id']}: {result['prompt_name']}")
 
     print("\n" + "=" * 80)
-    print("Detailed Result:")
+    print("Detailed Results:")
     print("=" * 80)
-    status = "✓" if base_result["success"] else "✗"
-    reveal = "🔍" if base_result["reveals_info"] else "  "
-    # Handle both string and integer prompt IDs
-    prompt_id = base_result["prompt_id"]
-    prompt_id_str = (
-        f"{prompt_id:>2}" if isinstance(prompt_id, int) else str(prompt_id).ljust(2)
-    )
-    print(
-        f"{status} {reveal} #{prompt_id_str}: {base_result['prompt_name']:30s} | Status: {base_result['status_code']}"
-    )
+
+    for result in results:
+        status = "✓" if result["success"] else "✗"
+        reveal = "🔍" if result["reveals_info"] else "  "
+        # Handle both string and integer prompt IDs
+        prompt_id = result["prompt_id"]
+        prompt_id_str = (
+            f"{prompt_id:>2}" if isinstance(prompt_id, int) else str(prompt_id).ljust(2)
+        )
+        # Truncate long prompt names
+        prompt_name = result["prompt_name"][:40]
+        print(
+            f"{status} {reveal} #{prompt_id_str}: {prompt_name:42s} | Status: {result['status_code']}"
+        )
 
     script_dir = Path(__file__).parent
     outputs_dir = script_dir / "outputs_json"
     outputs_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = outputs_dir / f"{agent_name}_pair_demo_results_{timestamp}.json"
+
+    # Use different filename based on test mode
+    if args.test_all:
+        output_file = outputs_dir / f"{agent_name}_sti_all_results_{timestamp}.json"
+    else:
+        output_file = outputs_dir / f"{agent_name}_pair_demo_results_{timestamp}.json"
+
     output_data = {
         "agent": agent_name,
         "timestamp": datetime.now().isoformat(),
+        "test_mode": "all_prompts" if args.test_all else "single_prompt",
+        "timeout": args.timeout,
         "total_prompts": len(results),
         "successful": len(successful),
         "reveals": len(reveals),
