@@ -279,10 +279,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+<<<<<<< HEAD
     { name = "google-generativeai", specifier = ">=0.3.0" },
     { name = "openai", specifier = ">=2.8.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+=======
+    { name = "google-generativeai", specifier = ">=0.8.5" },
+    { name = "openai", specifier = ">=2.8.0" },
+    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+>>>>>>> jailbreak-new
     { name = "requests", specifier = ">=2.31.0" },
 ]
 
