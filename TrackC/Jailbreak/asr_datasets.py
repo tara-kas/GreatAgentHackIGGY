@@ -474,7 +474,7 @@ def main(n_samples: int | None = None, seed: int = 42):
 
     #samples = load_csv_samples(csv_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "custom_prompts.csv", n=n_samples, seed=seed)
 
-    samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "sti_attack.jsonl", n=n_samples, seed=seed)
+    samples = load_json_samples(json_path=ROOT_DIR / "TrackC" / "RedTeamingPrompts" / "bear_architecture.json", n=n_samples, seed=seed)
 
     print(f"  Loaded {len(samples)} samples")
     

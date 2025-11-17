@@ -52,4 +52,3 @@ def print_unsafe_prompts_with_rules():
 
 if __name__ == "__main__":
     print_unsafe_prompts_with_rules()
-

@@ -357,5 +357,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    #generate a bar chart plot for this data using seaborn, with different colors for each agent with a purple
+    data = {"Ant": 13.30, "Bear": 5.60, "Chameleon": 0.00, "Eagle": 13.33, "Elephant": 8.45, "Fox": 4.00, "Wolf": 2.35}
+    sns.barplot(x=list(data.keys()), y=list(data.values()), palette="viridis")
+    plt.xlabel("Agent")
+    plt.ylabel("ASR")
+    plt.title("ASR by Agent")
+    plt.savefig("asr_by_agent.png")
+    plt.close()
 
